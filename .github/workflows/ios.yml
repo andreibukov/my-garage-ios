@@ -1,0 +1,58 @@
+name: Build iPhone app
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate public package
+        run: python3 scripts/validate_package.py
+      - name: Test date parsing and local reminder planning
+        run: swift test
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Build real-device application without signing
+        run: |
+          set -o pipefail
+          xcodebuild -project MyGarage.xcodeproj -scheme MyGarage -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build | tee build.log
+      - name: Package IPA for SideStore signing
+        run: python3 scripts/package_ipa.py
+      - name: Upload installable package for personal signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyGarage-unsigned-IPA
+          path: dist/MyGarage-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 7
+      - name: Build and launch iPhone simulator preview
+        run: |
+          set -o pipefail
+          xcodebuild -project MyGarage.xcodeproj -scheme MyGarage -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build-simulator CODE_SIGNING_ALLOWED=NO build | tee simulator-build.log
+          python3 scripts/simulator_preview.py
+      - name: Upload simulator screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyGarage-simulator-preview
+          path: dist/MyGarage-preview.png
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload build log if something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-diagnostics
+          path: build.log
+          if-no-files-found: ignore
+          retention-days: 3

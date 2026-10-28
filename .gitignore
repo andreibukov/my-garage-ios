@@ -1,0 +1,13 @@
+.DS_Store
+.build/
+build/
+build-simulator/
+dist/
+*.xcodeproj/
+*.xcworkspace/
+*.ipa
+*.p12
+*.mobileprovision
+*.cer
+*.log
+__pycache__/
